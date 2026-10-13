@@ -144,6 +144,11 @@ def main():
     print(f"[Walkie-Isaac] Referencing robot USD: {robot_usd_path} -> {robot_prim_path}")
     add_reference_to_stage(usd_path=str(robot_usd_path), prim_path=robot_prim_path)
 
+    robot_prim = stage.GetPrimAtPath(robot_prim_path)
+    if robot_prim.IsValid() and robot_prim.GetVariantSets().HasVariantSet("Physics"):
+        robot_prim.GetVariantSet("Physics").SetVariantSelection("physx")
+        print("[Walkie-Isaac] Activated PhysX physics variant on robot model (145+ joints loaded)")
+
     # --------------------------------------------------------------------------
     # Attach RTX LiDAR sensor to designated mount
     # --------------------------------------------------------------------------
