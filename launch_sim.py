@@ -127,11 +127,9 @@ def main():
 
     # --------------------------------------------------------------------------
     # Principle 4: Clean Stage Referencing
-    # Always create a clean stage and reference only the robot prim
+    # SimulationApp boots a clean stage; we initialize World and reference only
+    # the robot prim to extract kinematics while ignoring GUI viewport artifacts.
     # --------------------------------------------------------------------------
-    print(f"[Walkie-Isaac] Creating clean stage...")
-    create_new_stage()
-
     print(f"[Walkie-Isaac] Initializing simulation World (physics_dt={physics_dt}, rendering_dt={rendering_dt})...")
     world = World(physics_dt=physics_dt, rendering_dt=rendering_dt)
     world.scene.add_default_ground_plane()
