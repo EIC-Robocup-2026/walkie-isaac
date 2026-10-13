@@ -1,0 +1,11 @@
+{
+    "version": "1.0",
+    "file_records": [
+        {
+            "source_url": "/home/armmy2530/Project/omni_wheel_model_ws/robot-description/robots/gz_walkie_roller_absolute_path_1/payloads/Physics/mujoco.usda",
+            "source_hash": "87bedc3da623a20c2940b58daebcaf5f9e60b582",
+            "target_url": "./payloads/Physics/mujoco.usda",
+            "target_hash": "e597ace686d66ed9542c7a07a9ad9bc58e724f71"
+        }
+    ]
+}
