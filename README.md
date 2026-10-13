@@ -73,14 +73,21 @@ To test or benchmark without opening the graphical interface:
 pixi run sim -- --headless --test --steps 300
 ```
 
-### Running Standalone with Isaac Sim Python
+### 3. Visualizing LiDAR in RViz2
+
+```bash
+pixi run rviz-scan
+```
+*(Pre-configured with `Fixed Frame: front_lidar_link` and `use_sim_time: true`).*
+
+### 4. Running Standalone with Isaac Sim Python
 
 You can also run the launcher script directly outside Pixi using your Isaac Sim Python environment:
 
 ```bash
-export ROS_DISTRO=humble
+export ROS_DISTRO=jazzy
 export RMW_IMPLEMENTATION=rmw_fastrtps_cpp
-export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/home/kay/IsaacLab/.venv/lib/python3.12/site-packages/isaacsim/exts/isaacsim.ros2.core/humble/lib
+export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/home/kay/IsaacLab/.venv/lib/python3.12/site-packages/isaacsim/exts/isaacsim.ros2.core/jazzy/lib
 
 python3 launch_sim.py [--headless] [--test] [--steps <count>] [--config <path>]
 ```
@@ -148,6 +155,8 @@ graph TD
 
 | Symptom | Cause | Solution |
 | --- | --- | --- |
-| `ROS2 Bridge startup failed` | Isaac Sim cannot locate bundled ROS 2 shared libraries | Ensure `LD_LIBRARY_PATH` includes the Isaac Sim `isaacsim.ros2.core/humble/lib` path *before* starting the process. |
+| `sequence size exceeds remaining buffer` | FastDDS / ROSIDL distro mismatch between Humble bridge and Jazzy client | Isaac Sim must be set to `ROS_DISTRO=jazzy` with `LD_LIBRARY_PATH` pointing to `isaacsim.ros2.core/jazzy/lib` (configured by default in `pixi run sim`). |
+| `Message Filter dropping message: frame 'front_lidar_link' ... queue is full` | RViz is running on wall clock time OR missing TF transform to `map` | 1. Always launch RViz with `--ros-args -p use_sim_time:=true` (or run `pixi run rviz-scan`).<br/>2. In RViz **Global Options**, change **Fixed Frame** from `map` to `front_lidar_link`. |
+| `ROS2 Bridge startup failed` | Isaac Sim cannot locate bundled ROS 2 shared libraries | Ensure `LD_LIBRARY_PATH` includes the Isaac Sim `isaacsim.ros2.core/jazzy/lib` path *before* starting the process. |
 | `Topic not found` | Stage is stopped or paused | OmniGraph nodes use `OnPlaybackTick` and only publish while the timeline is playing (`timeline.play()`). |
 | Conflicting Python packages | Host `PYTHONPATH` leaking into Isaac Sim | Ensure `PYTHONPATH` is unset before launching (handled automatically by `launch_sim.py` and `pixi run sim`). |
