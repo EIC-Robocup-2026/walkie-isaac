@@ -109,12 +109,14 @@ class CmdVelSubscriber:
 def setup_ros2_action_graph(
     config: Dict[str, Any],
     sensors: Dict[str, Any],
+    robot_prim_path: str = "/World/walkie_bot",
 ) -> str:
-    """Programmatically construct the OmniGraph ROS 2 Action Graph for all sensors.
+    """Programmatically construct the OmniGraph ROS 2 Action Graph for all sensors and TF.
 
     Wires:
       • Clock: OnPlaybackTick + IsaacReadSimulationTime -> ROS2PublishClock
       • CmdVel: OnPlaybackTick + ROS2Context -> ROS2SubscribeTwist
+      • TF Tree: OnPlaybackTick + IsaacComputeTransformTree -> ROS2PublishTransformTree
       • 2D LiDAR: OnPlaybackTick + IsaacCreateRenderProduct -> ROS2RtxLidarHelper (laser_scan)
       • 3D LiDAR: OnPlaybackTick + IsaacCreateRenderProduct -> ROS2RtxLidarHelper (point_cloud)
       • IMU: OnPlaybackTick + IsaacReadIMU -> ROS2PublishImu
@@ -124,6 +126,7 @@ def setup_ros2_action_graph(
     Args:
         config: Parsed simulation configuration dictionary.
         sensors: Dictionary of configured sensor metadata from setup_sensors().
+        robot_prim_path: USD root prim path for the robot (default: /World/walkie_bot).
 
     Returns:
         Graph prim path (e.g. '/ROS2_ActionGraph').
@@ -164,6 +167,49 @@ def setup_ros2_action_graph(
         ("OnPlaybackTick.outputs:tick", "SubscribeTwist.inputs:execIn"),
         ("ROS2Context.outputs:context", "SubscribeTwist.inputs:context"),
     ]
+
+    # --------------------------------------------------------------------------
+    # Transform Tree (TF) Publisher
+    # --------------------------------------------------------------------------
+    tf_cfg = ros2_cfg.get("tf", {})
+    if tf_cfg.get("enabled", True):
+        from pxr import Sdf
+        tf_topic = tf_cfg.get("topic_name", "/tf")
+        parent_prim_str = tf_cfg.get(
+            "parent_prim",
+            f"{robot_prim_path}/Geometry/base_footprint",
+        )
+
+        target_prim_paths = [
+            f"{robot_prim_path}/Geometry/base_footprint/base_link",
+            f"{robot_prim_path}/Geometry/base_footprint/base_link/merged_lidar_link",
+            f"{robot_prim_path}/Geometry/base_footprint/base_link/front_lidar_link",
+            f"{robot_prim_path}/Geometry/base_footprint/base_link/back_lidar_link",
+            f"{robot_prim_path}/Geometry/base_footprint/base_link/unitree4d_l2_imu_initial",
+            f"{robot_prim_path}/Geometry/base_footprint/base_link/unitree4d_l2_imu_initial/unitree4d_l2_imu",
+            f"{robot_prim_path}/Geometry/base_footprint/base_link/lift_link/head_servo_link/zed_head_camera_link/zed_head_camera_center/zed_head_left_camera_frame/zed_head_left_camera_frame_optical",
+            f"{robot_prim_path}/Geometry/base_footprint/base_link/bottom_bottom_screw_frame/bottom_link/bottom_depth_frame/bottom_color_frame/bottom_color_optical_frame",
+        ]
+
+        nodes.extend([
+            ("ComputeTF", "isaacsim.core.nodes.IsaacComputeTransformTree"),
+            ("PublishTF", "isaacsim.ros2.bridge.ROS2PublishTransformTree"),
+        ])
+        values.extend([
+            ("ComputeTF.inputs:parentPrim", [Sdf.Path(parent_prim_str)]),
+            ("ComputeTF.inputs:targetPrims", [Sdf.Path(p) for p in target_prim_paths]),
+            ("PublishTF.inputs:topicName", tf_topic),
+        ])
+        connections.extend([
+            ("OnPlaybackTick.outputs:tick", "ComputeTF.inputs:execIn"),
+            ("ComputeTF.outputs:execOut", "PublishTF.inputs:execIn"),
+            ("ComputeTF.outputs:parentFrames", "PublishTF.inputs:parentFrames"),
+            ("ComputeTF.outputs:childFrames", "PublishTF.inputs:childFrames"),
+            ("ComputeTF.outputs:translations", "PublishTF.inputs:translations"),
+            ("ComputeTF.outputs:orientations", "PublishTF.inputs:orientations"),
+            ("ReadSimTime.outputs:simulationTime", "PublishTF.inputs:timeStamp"),
+            ("ROS2Context.outputs:context", "PublishTF.inputs:context"),
+        ])
 
     # --------------------------------------------------------------------------
     # 2D LiDAR (Center / Merged planar scan)
@@ -318,6 +364,8 @@ def setup_ros2_action_graph(
     print("[Walkie-Isaac:ROS2] Multi-Sensor Action Graph successfully built!")
     print(f"  • Clock:       {clock_topic} (rosgraph_msgs/msg/Clock)")
     print(f"  • Cmd Vel:     {cmd_vel_topic} (geometry_msgs/msg/Twist)")
+    if tf_cfg.get("enabled", True):
+        print(f"  • TF Tree:     {tf_topic} (tf2_msgs/msg/TFMessage, parent: {parent_prim_str})")
     if "lidar_2d" in sensors:
         print(f"  • 2D LiDAR:    {sensors['lidar_2d']['topic_name']} (LaserScan, frame: {sensors['lidar_2d']['frame_id']})")
     if "lidar_3d" in sensors:

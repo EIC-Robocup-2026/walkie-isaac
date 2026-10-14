@@ -149,7 +149,7 @@ def main():
     # --------------------------------------------------------------------------
     # 7. ROS 2 Bridge Setup Module (Action Graph & Teleop Subscriber)
     # --------------------------------------------------------------------------
-    setup_ros2_action_graph(config, sensors)
+    setup_ros2_action_graph(config, sensors, robot_prim_path=robot_prim_path)
     cmd_vel_topic = config.get("ros2", {}).get("cmd_vel_topic", "/cmd_vel")
     cmd_vel_sub = CmdVelSubscriber(topic_name=cmd_vel_topic, timeout_sec=0.5)
 
