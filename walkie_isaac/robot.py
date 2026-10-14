@@ -169,9 +169,95 @@ def setup_robot(
                 drive.GetStiffnessAttr().Set(0.0)
                 drive.GetMaxForceAttr().Set(100.0)
         else:
-            print(f"[Walkie-Isaac:Robot] Warning: joint prim not found at {joint_prim_path}")
-
+            print(f"[Walkie-Isaac:Robot] Warning: wheel joint prim not found at {joint_prim_path}")
     print("[Walkie-Isaac:Robot] Configured wheel velocity drives (damping=1000.0, stiffness=0.0)")
+
+    # Configure lift joint (prismatic, linear position drive)
+    lift_prim_path = f"{robot_prim_path}/Physics/lift_joint"
+    lift_prim = stage.GetPrimAtPath(lift_prim_path)
+    if lift_prim.IsValid():
+        drive = UsdPhysics.DriveAPI.Get(lift_prim, "linear")
+        if not drive:
+            drive = UsdPhysics.DriveAPI.Apply(lift_prim, "linear")
+        drive.GetDampingAttr().Set(10000.0)
+        drive.GetStiffnessAttr().Set(100000.0)
+        drive.GetMaxForceAttr().Set(10000.0)
+        target_attr = drive.GetTargetPositionAttr()
+        if not target_attr.IsValid():
+            target_attr = drive.CreateTargetPositionAttr()
+        target_attr.Set(0.0)
+        print("[Walkie-Isaac:Robot] Configured lift linear position drive (stiffness=100000.0, damping=10000.0)")
+
+    # Configure head servo joint (revolute, angular position drive)
+    head_prim_path = f"{robot_prim_path}/Physics/head_servo_joint"
+    head_prim = stage.GetPrimAtPath(head_prim_path)
+    if head_prim.IsValid():
+        drive = UsdPhysics.DriveAPI.Get(head_prim, "angular")
+        if not drive:
+            drive = UsdPhysics.DriveAPI.Apply(head_prim, "angular")
+        drive.GetDampingAttr().Set(200.0)
+        drive.GetStiffnessAttr().Set(5000.0)
+        drive.GetMaxForceAttr().Set(50.0)
+        target_attr = drive.GetTargetPositionAttr()
+        if not target_attr.IsValid():
+            target_attr = drive.CreateTargetPositionAttr()
+        target_attr.Set(0.0)
+        print("[Walkie-Isaac:Robot] Configured head servo angular position drive (stiffness=5000.0, damping=200.0)")
+
+    # Configure dual arms (14 revolute joints) with MoveIt home nominal pose
+    # Note: USD physics angular drives expect degrees.
+    arm_home_deg = {
+        "openarm_left_joint1": 15.0,   # ~0.2618 rad
+        "openarm_left_joint2": 0.0,
+        "openarm_left_joint3": 0.0,
+        "openarm_left_joint4": 15.0,   # ~0.2618 rad
+        "openarm_left_joint5": 0.0,
+        "openarm_left_joint6": 0.0,
+        "openarm_left_joint7": 0.0,
+        "openarm_right_joint1": -15.0, # ~ -0.2618 rad
+        "openarm_right_joint2": 0.0,
+        "openarm_right_joint3": 0.0,
+        "openarm_right_joint4": 15.0,  # ~0.2618 rad
+        "openarm_right_joint5": 0.0,
+        "openarm_right_joint6": 0.0,
+        "openarm_right_joint7": 0.0,
+    }
+    for joint_name, target_deg in arm_home_deg.items():
+        joint_path = f"{robot_prim_path}/Physics/{joint_name}"
+        joint_prim = stage.GetPrimAtPath(joint_path)
+        if joint_prim.IsValid():
+            drive = UsdPhysics.DriveAPI.Get(joint_prim, "angular")
+            if not drive:
+                drive = UsdPhysics.DriveAPI.Apply(joint_prim, "angular")
+            drive.GetDampingAttr().Set(200.0)
+            drive.GetStiffnessAttr().Set(5000.0)
+            drive.GetMaxForceAttr().Set(100.0)
+            target_attr = drive.GetTargetPositionAttr()
+            if not target_attr.IsValid():
+                target_attr = drive.CreateTargetPositionAttr()
+            target_attr.Set(float(target_deg))
+    print("[Walkie-Isaac:Robot] Configured 14 arm joint angular position drives with MoveIt home pose")
+
+    # Configure gripper fingers (prismatic, linear position drives)
+    gripper_finger_names = [
+        "openarm_left_finger_joint1", "openarm_left_finger_joint2",
+        "openarm_right_finger_joint1", "openarm_right_finger_joint2",
+    ]
+    for finger_name in gripper_finger_names:
+        finger_path = f"{robot_prim_path}/Physics/{finger_name}"
+        finger_prim = stage.GetPrimAtPath(finger_path)
+        if finger_prim.IsValid():
+            drive = UsdPhysics.DriveAPI.Get(finger_prim, "linear")
+            if not drive:
+                drive = UsdPhysics.DriveAPI.Apply(finger_prim, "linear")
+            drive.GetDampingAttr().Set(100.0)
+            drive.GetStiffnessAttr().Set(2000.0)
+            drive.GetMaxForceAttr().Set(50.0)
+            target_attr = drive.GetTargetPositionAttr()
+            if not target_attr.IsValid():
+                target_attr = drive.CreateTargetPositionAttr()
+            target_attr.Set(0.0)
+    print("[Walkie-Isaac:Robot] Configured gripper finger linear position drives")
 
     # Create SingleArticulation wrapper and register with simulation world
     robot_art = SingleArticulation(robot_prim_path)

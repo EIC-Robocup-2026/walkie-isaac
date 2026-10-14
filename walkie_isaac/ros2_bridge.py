@@ -191,6 +191,35 @@ def setup_ros2_action_graph(
         ])
 
     # --------------------------------------------------------------------------
+    # Joint Command Subscriber & Articulation Controller (Arm & Lift control)
+    # --------------------------------------------------------------------------
+    joint_cmd_cfg = ros2_cfg.get("joint_commands", {})
+    if joint_cmd_cfg.get("enabled", True):
+        from pxr import Sdf
+        cmd_topic = joint_cmd_cfg.get("topic_name", "/joint_commands")
+        art_target_prim = joint_cmd_cfg.get(
+            "target_prim",
+            f"{robot_prim_path}/Geometry/base_footprint/base_link",
+        )
+        nodes.extend([
+            ("SubscribeJointCommand", "isaacsim.ros2.bridge.ROS2SubscribeJointState"),
+            ("ArticulationController", "isaacsim.core.nodes.IsaacArticulationController"),
+        ])
+        values.extend([
+            ("SubscribeJointCommand.inputs:topicName", cmd_topic),
+            ("ArticulationController.inputs:targetPrim", [Sdf.Path(art_target_prim)]),
+        ])
+        connections.extend([
+            ("OnPlaybackTick.outputs:tick", "SubscribeJointCommand.inputs:execIn"),
+            ("ROS2Context.outputs:context", "SubscribeJointCommand.inputs:context"),
+            ("SubscribeJointCommand.outputs:execOut", "ArticulationController.inputs:execIn"),
+            ("SubscribeJointCommand.outputs:jointNames", "ArticulationController.inputs:jointNames"),
+            ("SubscribeJointCommand.outputs:positionCommand", "ArticulationController.inputs:positionCommand"),
+            ("SubscribeJointCommand.outputs:velocityCommand", "ArticulationController.inputs:velocityCommand"),
+            ("SubscribeJointCommand.outputs:effortCommand", "ArticulationController.inputs:effortCommand"),
+        ])
+
+    # --------------------------------------------------------------------------
     # Transform Tree (TF & TF_Static) Publishers
     # --------------------------------------------------------------------------
     tf_cfg = ros2_cfg.get("tf", {})
@@ -420,6 +449,8 @@ def setup_ros2_action_graph(
     print(f"  • Clock:       {clock_topic} (rosgraph_msgs/msg/Clock)")
     if joint_states_cfg.get("enabled", True):
         print(f"  • Joint States:{js_topic} (sensor_msgs/msg/JointState, target: {js_target_prim})")
+    if joint_cmd_cfg.get("enabled", True):
+        print(f"  • Joint Cmds:  {cmd_topic} (sensor_msgs/msg/JointState -> ArticulationController)")
     if tf_cfg.get("enabled", False):
         print(f"  • TF Dynamic:  {tf_topic} (tf2_msgs/msg/TFMessage, parent: {parent_prim_str})")
         print(f"  • TF Static:   {tf_static_topic} (tf2_msgs/msg/TFMessage, latched)")

@@ -95,6 +95,9 @@ ros2:
   joint_states:
     enabled: true
     topic_name: "/joint_states"
+  joint_commands:
+    enabled: true
+    topic_name: "/joint_commands"
   tf:
     # Set to false by default so the main ROS 2 architecture (robot_state_publisher)
     # handles all TF transforms from URDF without publisher conflicts.

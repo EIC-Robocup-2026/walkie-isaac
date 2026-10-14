@@ -104,6 +104,7 @@ def main():
     from isaacsim.core.utils.extensions import enable_extension
 
     enable_extension("isaacsim.ros2.bridge")
+    enable_extension("isaacsim.core.nodes")
 
     # --------------------------------------------------------------------------
     # 3. Import simulation modules (safe after SimulationApp is active)
