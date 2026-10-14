@@ -142,6 +142,21 @@ def setup_robot(
         robot_prim.GetVariantSet("Physics").SetVariantSelection("physx")
         print("[Walkie-Isaac:Robot] Activated PhysX physics variant (145+ joints loaded)")
 
+    # Set initial robot spawn translation
+    spawn_pos = robot_cfg.get("spawn_position", [0.0, 0.0, 0.05])
+    if robot_prim.IsValid() and spawn_pos is not None:
+        from pxr import Gf, UsdGeom
+        xformable = UsdGeom.Xformable(robot_prim)
+        translate_op = None
+        for op in xformable.GetOrderedXformOps():
+            if op.GetOpType() == UsdGeom.XformOp.TypeTranslate:
+                translate_op = op
+                break
+        if translate_op is None:
+            translate_op = xformable.AddTranslateOp()
+        translate_op.Set(Gf.Vec3d(float(spawn_pos[0]), float(spawn_pos[1]), float(spawn_pos[2])))
+        print(f"[Walkie-Isaac:Robot] Set robot spawn position to {spawn_pos}")
+
     # Configure wheel drives for velocity control (damping = gain Kv, stiffness = 0)
     wheel_names = ["fl_wheel_joint", "bl_wheel_joint", "br_wheel_joint", "fr_wheel_joint"]
     for w_name in wheel_names:

@@ -169,38 +169,62 @@ def setup_ros2_action_graph(
     ]
 
     # --------------------------------------------------------------------------
-    # Transform Tree (TF) Publisher
+    # Transform Tree (TF & TF_Static) Publishers
     # --------------------------------------------------------------------------
     tf_cfg = ros2_cfg.get("tf", {})
     if tf_cfg.get("enabled", True):
         from pxr import Sdf
         tf_topic = tf_cfg.get("topic_name", "/tf")
+        tf_static_topic = tf_cfg.get("static_topic_name", "/tf_static")
         parent_prim_str = tf_cfg.get(
             "parent_prim",
             f"{robot_prim_path}/Geometry/base_footprint",
         )
 
-        target_prim_paths = [
+        # Static sensor frames (fixed relative to base footprint/chassis).
+        # Published on /tf_static with staticPublisher=True (latched transient_local QoS).
+        # In ROS 2 tf2, static transforms are valid for ALL timestamps, completely
+        # eliminating extrapolation-into-the-future errors in RViz.
+        static_target_paths = [
             f"{robot_prim_path}/Geometry/base_footprint/base_link",
             f"{robot_prim_path}/Geometry/base_footprint/base_link/merged_lidar_link",
             f"{robot_prim_path}/Geometry/base_footprint/base_link/front_lidar_link",
             f"{robot_prim_path}/Geometry/base_footprint/base_link/back_lidar_link",
             f"{robot_prim_path}/Geometry/base_footprint/base_link/unitree4d_l2_imu_initial",
             f"{robot_prim_path}/Geometry/base_footprint/base_link/unitree4d_l2_imu_initial/unitree4d_l2_imu",
-            f"{robot_prim_path}/Geometry/base_footprint/base_link/lift_link/head_servo_link/zed_head_camera_link/zed_head_camera_center/zed_head_left_camera_frame/zed_head_left_camera_frame_optical",
             f"{robot_prim_path}/Geometry/base_footprint/base_link/bottom_bottom_screw_frame/bottom_link/bottom_depth_frame/bottom_color_frame/bottom_color_optical_frame",
         ]
 
+        # Dynamic target frames (articulated bodies that move during simulation).
+        # Articulation root base_link automatically expands to all actuated joints
+        # (wheels, torso lift, head servo, arms).
+        dynamic_target_paths = [
+            f"{robot_prim_path}/Geometry/base_footprint/base_link",
+            f"{robot_prim_path}/Geometry/base_footprint/base_link/lift_link/head_servo_link/zed_head_camera_link/zed_head_camera_center/zed_head_left_camera_frame/zed_head_left_camera_frame_optical",
+        ]
+
         nodes.extend([
+            # Dynamic TF
             ("ComputeTF", "isaacsim.core.nodes.IsaacComputeTransformTree"),
             ("PublishTF", "isaacsim.ros2.bridge.ROS2PublishTransformTree"),
+            # Static TF
+            ("ComputeTFStatic", "isaacsim.core.nodes.IsaacComputeTransformTree"),
+            ("PublishTFStatic", "isaacsim.ros2.bridge.ROS2PublishTransformTree"),
         ])
         values.extend([
+            # Dynamic TF
             ("ComputeTF.inputs:parentPrim", [Sdf.Path(parent_prim_str)]),
-            ("ComputeTF.inputs:targetPrims", [Sdf.Path(p) for p in target_prim_paths]),
+            ("ComputeTF.inputs:targetPrims", [Sdf.Path(p) for p in dynamic_target_paths]),
             ("PublishTF.inputs:topicName", tf_topic),
+            ("PublishTF.inputs:staticPublisher", False),
+            # Static TF
+            ("ComputeTFStatic.inputs:parentPrim", [Sdf.Path(parent_prim_str)]),
+            ("ComputeTFStatic.inputs:targetPrims", [Sdf.Path(p) for p in static_target_paths]),
+            ("PublishTFStatic.inputs:topicName", tf_static_topic),
+            ("PublishTFStatic.inputs:staticPublisher", True),
         ])
         connections.extend([
+            # Dynamic TF
             ("OnPlaybackTick.outputs:tick", "ComputeTF.inputs:execIn"),
             ("ComputeTF.outputs:execOut", "PublishTF.inputs:execIn"),
             ("ComputeTF.outputs:parentFrames", "PublishTF.inputs:parentFrames"),
@@ -209,6 +233,15 @@ def setup_ros2_action_graph(
             ("ComputeTF.outputs:orientations", "PublishTF.inputs:orientations"),
             ("ReadSimTime.outputs:simulationTime", "PublishTF.inputs:timeStamp"),
             ("ROS2Context.outputs:context", "PublishTF.inputs:context"),
+            # Static TF
+            ("OnPlaybackTick.outputs:tick", "ComputeTFStatic.inputs:execIn"),
+            ("ComputeTFStatic.outputs:execOut", "PublishTFStatic.inputs:execIn"),
+            ("ComputeTFStatic.outputs:parentFrames", "PublishTFStatic.inputs:parentFrames"),
+            ("ComputeTFStatic.outputs:childFrames", "PublishTFStatic.inputs:childFrames"),
+            ("ComputeTFStatic.outputs:translations", "PublishTFStatic.inputs:translations"),
+            ("ComputeTFStatic.outputs:orientations", "PublishTFStatic.inputs:orientations"),
+            ("ReadSimTime.outputs:simulationTime", "PublishTFStatic.inputs:timeStamp"),
+            ("ROS2Context.outputs:context", "PublishTFStatic.inputs:context"),
         ])
 
     # --------------------------------------------------------------------------
@@ -365,7 +398,8 @@ def setup_ros2_action_graph(
     print(f"  • Clock:       {clock_topic} (rosgraph_msgs/msg/Clock)")
     print(f"  • Cmd Vel:     {cmd_vel_topic} (geometry_msgs/msg/Twist)")
     if tf_cfg.get("enabled", True):
-        print(f"  • TF Tree:     {tf_topic} (tf2_msgs/msg/TFMessage, parent: {parent_prim_str})")
+        print(f"  • TF Dynamic:  {tf_topic} (tf2_msgs/msg/TFMessage, parent: {parent_prim_str})")
+        print(f"  • TF Static:   {tf_static_topic} (tf2_msgs/msg/TFMessage, latched)")
     if "lidar_2d" in sensors:
         print(f"  • 2D LiDAR:    {sensors['lidar_2d']['topic_name']} (LaserScan, frame: {sensors['lidar_2d']['frame_id']})")
     if "lidar_3d" in sensors:

@@ -60,6 +60,7 @@ Visualization Manager:
       Size (Pixels): 3
       Size (m): 0.04
       Style: Flat Squares
+      Transform Tolerance: 0.1
       Topic:
         Depth: 5
         Durability Policy: Volatile
@@ -86,6 +87,7 @@ Visualization Manager:
       Size (Pixels): 3
       Size (m): 0.03
       Style: Points
+      Transform Tolerance: 0.1
       Topic:
         Depth: 5
         Durability Policy: Volatile
@@ -112,6 +114,7 @@ Visualization Manager:
       Size (Pixels): 2
       Size (m): 0.02
       Style: Points
+      Transform Tolerance: 0.1
       Topic:
         Depth: 5
         Durability Policy: Volatile
@@ -138,6 +141,7 @@ Visualization Manager:
       Size (Pixels): 2
       Size (m): 0.02
       Style: Points
+      Transform Tolerance: 0.1
       Topic:
         Depth: 5
         Durability Policy: Volatile

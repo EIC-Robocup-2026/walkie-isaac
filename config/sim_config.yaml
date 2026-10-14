@@ -6,9 +6,15 @@ simulation:
   physics_dt: 0.016666667   # 60 Hz physics step
   rendering_dt: 0.016666667 # 60 Hz rendering step
 
+environment:
+  type: "warehouse"         # Options: "warehouse" (standard Isaac Sim warehouse), "ground_plane"
+  warehouse_usd: "https://omniverse-content-production.s3-us-west-2.amazonaws.com/Assets/Isaac/6.1/Isaac/Environments/Simple_Warehouse/warehouse.usd"
+
 robot:
   usd_path: "assets/Collected_gz_walkie_roller/gz_walkie_roller_absolute_path.usda"
   prim_path: "/World/walkie_bot"
+  spawn_position: [0.0, 0.0, 0.05] # [x, y, z] in meters (slightly elevated for wheel contact)
+  spawn_orientation: [1.0, 0.0, 0.0, 0.0]
 
 sensors:
   # ----------------------------------------------------------------------------
@@ -89,4 +95,5 @@ ros2:
   tf:
     enabled: true
     topic_name: "/tf"
+    static_topic_name: "/tf_static"
     parent_prim: "/World/walkie_bot/Geometry/base_footprint"

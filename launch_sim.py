@@ -118,7 +118,7 @@ def main():
     from walkie_isaac.ros2_bridge import setup_ros2_action_graph, CmdVelSubscriber
 
     # --------------------------------------------------------------------------
-    # 4. Initialize Simulation World & Default Lighting
+    # 4. Initialize Simulation World, Environment & Lighting
     # --------------------------------------------------------------------------
     sim_cfg = config.get("simulation", {})
     physics_dt = float(sim_cfg.get("physics_dt", 1.0 / 60.0))
@@ -128,7 +128,22 @@ def main():
         f"[Walkie-Isaac] Initializing World (physics_dt={physics_dt:.4f}, rendering_dt={rendering_dt:.4f})..."
     )
     world = World(physics_dt=physics_dt, rendering_dt=rendering_dt)
-    world.scene.add_default_ground_plane()
+
+    env_cfg = config.get("environment", {})
+    env_type = env_cfg.get("type", "warehouse")
+    if env_type == "warehouse":
+        from isaacsim.storage.native import get_assets_root_path
+        from isaacsim.core.utils.stage import add_reference_to_stage
+
+        default_url = (
+            f"{get_assets_root_path()}/Isaac/Environments/Simple_Warehouse/warehouse.usd"
+        )
+        warehouse_url = env_cfg.get("warehouse_usd", default_url)
+        print(f"[Walkie-Isaac:Env] Loading Warehouse scene: {warehouse_url}...")
+        add_reference_to_stage(usd_path=warehouse_url, prim_path="/World/Warehouse")
+    else:
+        print("[Walkie-Isaac:Env] Adding default ground plane...")
+        world.scene.add_default_ground_plane()
 
     stage = omni.usd.get_context().get_stage()
     if not stage.GetPrimAtPath("/World/defaultLight"):
