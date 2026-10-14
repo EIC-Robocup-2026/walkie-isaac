@@ -24,6 +24,7 @@ sensors:
     max_range: 25.0
 
 ros2:
+  rmw: "rmw_zenoh_cpp"
   domain_id: 0
   clock_topic: "/clock"
   cmd_vel_topic: "/cmd_vel"

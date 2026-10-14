@@ -2,9 +2,49 @@
 
 """ROS 2 bridge and Action Graph integration module for Walkie-Isaac."""
 
+import socket
+import subprocess
 import time
 from typing import Any, Dict, Optional
 from walkie_isaac.robot import OmniBaseController
+
+
+def ensure_zenoh_router(port: int = 7447) -> bool:
+    """Ensure a Zenoh router (rmw_zenohd) daemon is active, auto-starting if needed.
+
+    Args:
+        port: Zenoh router TCP port to check (default: 7447).
+
+    Returns:
+        True if the router is reachable, False otherwise.
+    """
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.settimeout(0.5)
+        if s.connect_ex(("127.0.0.1", port)) == 0:
+            print(f"[Walkie-Isaac:Zenoh] Connected to active Zenoh router on port {port}.")
+            return True
+
+    print(f"[Walkie-Isaac:Zenoh] Zenoh router not detected. Auto-starting 'rmw_zenohd' daemon...")
+    try:
+        subprocess.Popen(
+            ["ros2", "run", "rmw_zenoh_cpp", "rmw_zenohd"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True,
+        )
+        start = time.time()
+        while time.time() - start < 4.0:
+            time.sleep(0.2)
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.settimeout(0.5)
+                if s.connect_ex(("127.0.0.1", port)) == 0:
+                    print(f"[Walkie-Isaac:Zenoh] Zenoh router successfully started on port {port}.")
+                    return True
+        print(f"[Walkie-Isaac:Zenoh] Warning: Timed out waiting for Zenoh router on port {port}.")
+        return False
+    except Exception as e:
+        print(f"[Walkie-Isaac:Zenoh] Warning: Could not auto-start rmw_zenohd: {e}")
+        return False
 
 
 class CmdVelSubscriber:

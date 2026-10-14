@@ -80,6 +80,16 @@ def main():
     )
 
     # --------------------------------------------------------------------------
+    # 0. Zenoh Router Preflight Check
+    # Ensure Zenoh router (rmw_zenohd) daemon is active if using rmw_zenoh_cpp
+    # --------------------------------------------------------------------------
+    active_rmw = os.environ.get("RMW_IMPLEMENTATION", "")
+    config_rmw = config.get("ros2", {}).get("rmw", "")
+    if active_rmw == "rmw_zenoh_cpp" or config_rmw == "rmw_zenoh_cpp":
+        from walkie_isaac.ros2_bridge import ensure_zenoh_router
+        ensure_zenoh_router()
+
+    # --------------------------------------------------------------------------
     # 1. Initialize Isaac Sim SimulationApp
     # --------------------------------------------------------------------------
     print(f"[Walkie-Isaac] Initializing SimulationApp (headless={headless})...")
