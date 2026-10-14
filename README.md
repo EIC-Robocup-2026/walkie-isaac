@@ -26,12 +26,18 @@ Traditional Isaac Sim robotics workflows often rely on manual interaction with t
 ```
 walkie-isaac/
 ├── config/
-│   └── sim_config.yaml              # Topic names, LiDAR specifications, physics step
+│   ├── sim_config.yaml              # Topic names, LiDAR specifications, physics step
+│   └── view_scan.rviz               # Pre-configured RViz display for LiDAR inspection
 ├── assets/
 │   └── Collected_gz_walkie_roller/  # Robot USD model, meshes, and physics payloads
 │       ├── gz_walkie_roller_absolute_path.usda  # Root USD model (Physics variantSet)
 │       └── payloads/                # Geometries, materials, PhysX/MuJoCo definitions
-├── launch_sim.py                    # Standalone Isaac Sim Python runner
+├── walkie_isaac/                    # Modular simulation Python package
+│   ├── __init__.py                  # Package initialization
+│   ├── robot.py                     # Robot USD loader, PhysX variant, drive tuning & OmniBaseController
+│   ├── sensors.py                   # RTX LiDAR and sensor creation module
+│   └── ros2_bridge.py               # Action Graph builder & teleop Twist subscriber
+├── launch_sim.py                    # Modular Isaac Sim simulation entrypoint
 └── README.md                        # Documentation
 ```
 
