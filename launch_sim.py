@@ -142,15 +142,14 @@ def main():
     robot_art, base_controller = setup_robot(config, world, SCRIPT_DIR)
 
     # --------------------------------------------------------------------------
-    # 6. Sensors Setup Module (RTX LiDAR, etc.)
+    # 6. Sensors Setup Module (RTX LiDARs, Cameras, IMU)
     # --------------------------------------------------------------------------
     sensors = setup_sensors(config, robot_prim_path)
-    lidar_sensor_prim = sensors["lidar"]["sensor_prim_path"]
 
     # --------------------------------------------------------------------------
     # 7. ROS 2 Bridge Setup Module (Action Graph & Teleop Subscriber)
     # --------------------------------------------------------------------------
-    setup_ros2_action_graph(config, lidar_sensor_prim)
+    setup_ros2_action_graph(config, sensors)
     cmd_vel_topic = config.get("ros2", {}).get("cmd_vel_topic", "/cmd_vel")
     cmd_vel_sub = CmdVelSubscriber(topic_name=cmd_vel_topic, timeout_sec=0.5)
 

@@ -108,18 +108,22 @@ class CmdVelSubscriber:
 
 def setup_ros2_action_graph(
     config: Dict[str, Any],
-    sensor_prim_path: str,
+    sensors: Dict[str, Any],
 ) -> str:
-    """Programmatically construct the OmniGraph ROS 2 Action Graph at runtime.
+    """Programmatically construct the OmniGraph ROS 2 Action Graph for all sensors.
 
     Wires:
-      • OnPlaybackTick + IsaacReadSimulationTime -> ROS2PublishClock
-      • OnPlaybackTick + ROS2Context             -> ROS2SubscribeTwist
-      • OnPlaybackTick + IsaacCreateRenderProduct-> ROS2RtxLidarHelper
+      • Clock: OnPlaybackTick + IsaacReadSimulationTime -> ROS2PublishClock
+      • CmdVel: OnPlaybackTick + ROS2Context -> ROS2SubscribeTwist
+      • 2D LiDAR: OnPlaybackTick + IsaacCreateRenderProduct -> ROS2RtxLidarHelper (laser_scan)
+      • 3D LiDAR: OnPlaybackTick + IsaacCreateRenderProduct -> ROS2RtxLidarHelper (point_cloud)
+      • IMU: OnPlaybackTick + IsaacReadIMU -> ROS2PublishImu
+      • Head Camera: OnPlaybackTick + IsaacCreateRenderProduct -> ROS2CameraHelper (RGB, Depth, PointCloud)
+      • Bottom Camera: OnPlaybackTick + IsaacCreateRenderProduct -> ROS2CameraHelper (RGB, Depth, PointCloud)
 
     Args:
         config: Parsed simulation configuration dictionary.
-        sensor_prim_path: USD path to the RTX LiDAR sensor prim.
+        sensors: Dictionary of configured sensor metadata from setup_sensors().
 
     Returns:
         Graph prim path (e.g. '/ROS2_ActionGraph').
@@ -131,12 +135,6 @@ def setup_ros2_action_graph(
     clock_topic = ros2_cfg.get("clock_topic", "/clock")
     cmd_vel_topic = ros2_cfg.get("cmd_vel_topic", "/cmd_vel")
 
-    sensors_cfg = config.get("sensors", {})
-    lidar_cfg = sensors_cfg.get("lidar", {})
-    lidar_frame_id = lidar_cfg.get("frame_id", "front_lidar_link")
-    lidar_topic = lidar_cfg.get("topic_name", "/scan")
-    lidar_type = lidar_cfg.get("type", "laser_scan")
-
     graph_path = "/ROS2_ActionGraph"
     print(f"[Walkie-Isaac:ROS2] Building Action Graph at {graph_path}...")
     keys = og.Controller.Keys
@@ -147,8 +145,6 @@ def setup_ros2_action_graph(
         ("ROS2Context", "isaacsim.ros2.bridge.ROS2Context"),
         ("PublishClock", "isaacsim.ros2.bridge.ROS2PublishClock"),
         ("SubscribeTwist", "isaacsim.ros2.bridge.ROS2SubscribeTwist"),
-        ("CreateRenderProduct", "isaacsim.core.nodes.IsaacCreateRenderProduct"),
-        ("RtxLidarHelper", "isaacsim.ros2.bridge.ROS2RtxLidarHelper"),
     ]
 
     values = [
@@ -156,13 +152,6 @@ def setup_ros2_action_graph(
         ("ROS2Context.inputs:useDomainIDEnvVar", True),
         ("PublishClock.inputs:topicName", clock_topic),
         ("SubscribeTwist.inputs:topicName", cmd_vel_topic),
-        ("CreateRenderProduct.inputs:cameraPrim", [sensor_prim_path]),
-        ("CreateRenderProduct.inputs:width", 1),
-        ("CreateRenderProduct.inputs:height", 1),
-        ("RtxLidarHelper.inputs:topicName", lidar_topic),
-        ("RtxLidarHelper.inputs:type", lidar_type),
-        ("RtxLidarHelper.inputs:frameId", lidar_frame_id),
-        ("RtxLidarHelper.inputs:resetSimulationTimeOnStop", True),
     ]
 
     connections = [
@@ -174,13 +163,148 @@ def setup_ros2_action_graph(
         # Twist
         ("OnPlaybackTick.outputs:tick", "SubscribeTwist.inputs:execIn"),
         ("ROS2Context.outputs:context", "SubscribeTwist.inputs:context"),
-
-        # LiDAR Helper
-        ("OnPlaybackTick.outputs:tick", "CreateRenderProduct.inputs:execIn"),
-        ("CreateRenderProduct.outputs:execOut", "RtxLidarHelper.inputs:execIn"),
-        ("CreateRenderProduct.outputs:renderProductPath", "RtxLidarHelper.inputs:renderProductPath"),
-        ("ROS2Context.outputs:context", "RtxLidarHelper.inputs:context"),
     ]
+
+    # --------------------------------------------------------------------------
+    # 2D LiDAR (Center / Merged planar scan)
+    # --------------------------------------------------------------------------
+    if "lidar_2d" in sensors:
+        l2d = sensors["lidar_2d"]
+        nodes.extend([
+            ("RP_Lidar2D", "isaacsim.core.nodes.IsaacCreateRenderProduct"),
+            ("Helper_Lidar2D", "isaacsim.ros2.bridge.ROS2RtxLidarHelper"),
+        ])
+        values.extend([
+            ("RP_Lidar2D.inputs:cameraPrim", [l2d["sensor_prim_path"]]),
+            ("RP_Lidar2D.inputs:width", 1),
+            ("RP_Lidar2D.inputs:height", 1),
+            ("Helper_Lidar2D.inputs:type", "laser_scan"),
+            ("Helper_Lidar2D.inputs:topicName", l2d["topic_name"]),
+            ("Helper_Lidar2D.inputs:frameId", l2d["frame_id"]),
+            ("Helper_Lidar2D.inputs:resetSimulationTimeOnStop", True),
+        ])
+        connections.extend([
+            ("OnPlaybackTick.outputs:tick", "RP_Lidar2D.inputs:execIn"),
+            ("RP_Lidar2D.outputs:execOut", "Helper_Lidar2D.inputs:execIn"),
+            ("RP_Lidar2D.outputs:renderProductPath", "Helper_Lidar2D.inputs:renderProductPath"),
+            ("ROS2Context.outputs:context", "Helper_Lidar2D.inputs:context"),
+        ])
+
+    # --------------------------------------------------------------------------
+    # 3D LiDAR (Unitree 4D multi-ring point cloud)
+    # --------------------------------------------------------------------------
+    if "lidar_3d" in sensors:
+        l3d = sensors["lidar_3d"]
+        nodes.extend([
+            ("RP_Lidar3D", "isaacsim.core.nodes.IsaacCreateRenderProduct"),
+            ("Helper_Lidar3D", "isaacsim.ros2.bridge.ROS2RtxLidarHelper"),
+        ])
+        values.extend([
+            ("RP_Lidar3D.inputs:cameraPrim", [l3d["sensor_prim_path"]]),
+            ("RP_Lidar3D.inputs:width", 1),
+            ("RP_Lidar3D.inputs:height", 1),
+            ("Helper_Lidar3D.inputs:type", "point_cloud"),
+            ("Helper_Lidar3D.inputs:topicName", l3d["topic_name"]),
+            ("Helper_Lidar3D.inputs:frameId", l3d["frame_id"]),
+            ("Helper_Lidar3D.inputs:resetSimulationTimeOnStop", True),
+        ])
+        connections.extend([
+            ("OnPlaybackTick.outputs:tick", "RP_Lidar3D.inputs:execIn"),
+            ("RP_Lidar3D.outputs:execOut", "Helper_Lidar3D.inputs:execIn"),
+            ("RP_Lidar3D.outputs:renderProductPath", "Helper_Lidar3D.inputs:renderProductPath"),
+            ("ROS2Context.outputs:context", "Helper_Lidar3D.inputs:context"),
+        ])
+
+    # --------------------------------------------------------------------------
+    # IMU (Integrated at 3D LiDAR)
+    # --------------------------------------------------------------------------
+    if "imu" in sensors:
+        imu = sensors["imu"]
+        nodes.extend([
+            ("ReadIMU", "isaacsim.sensors.physics.IsaacReadIMU"),
+            ("PublishIMU", "isaacsim.ros2.bridge.ROS2PublishImu"),
+        ])
+        values.extend([
+            ("ReadIMU.inputs:imuPrim", [imu["sensor_prim_path"]]),
+            ("ReadIMU.inputs:readGravity", True),
+            ("PublishIMU.inputs:topicName", imu["topic_name"]),
+            ("PublishIMU.inputs:frameId", imu["frame_id"]),
+        ])
+        connections.extend([
+            ("OnPlaybackTick.outputs:tick", "ReadIMU.inputs:execIn"),
+            ("ReadIMU.outputs:execOut", "PublishIMU.inputs:execIn"),
+            ("ROS2Context.outputs:context", "PublishIMU.inputs:context"),
+            ("ReadSimTime.outputs:simulationTime", "PublishIMU.inputs:timeStamp"),
+            ("ReadIMU.outputs:angVel", "PublishIMU.inputs:angularVelocity"),
+            ("ReadIMU.outputs:linAcc", "PublishIMU.inputs:linearAcceleration"),
+            ("ReadIMU.outputs:orientation", "PublishIMU.inputs:orientation"),
+        ])
+
+    # --------------------------------------------------------------------------
+    # Cameras: Head (ZED 2i) and Bottom (RealSense D415)
+    # --------------------------------------------------------------------------
+    camera_keys = [("head_camera", "HeadCam"), ("bottom_camera", "BottomCam")]
+    for cam_key, prefix in camera_keys:
+        if cam_key in sensors:
+            cam = sensors[cam_key]
+            rp_node = f"RP_{prefix}"
+            info_node = f"Info_{prefix}"
+            rgb_node = f"RGB_{prefix}"
+            depth_node = f"Depth_{prefix}"
+            pcl_node = f"Pcl_{prefix}"
+
+            nodes.extend([
+                (rp_node, "isaacsim.core.nodes.IsaacCreateRenderProduct"),
+                (info_node, "isaacsim.ros2.bridge.ROS2CameraInfoHelper"),
+                (rgb_node, "isaacsim.ros2.bridge.ROS2CameraHelper"),
+                (depth_node, "isaacsim.ros2.bridge.ROS2CameraHelper"),
+                (pcl_node, "isaacsim.ros2.bridge.ROS2CameraHelper"),
+            ])
+
+            values.extend([
+                (f"{rp_node}.inputs:cameraPrim", [cam["camera_prim_path"]]),
+                (f"{rp_node}.inputs:width", cam["width"]),
+                (f"{rp_node}.inputs:height", cam["height"]),
+                # Camera Info
+                (f"{info_node}.inputs:topicName", cam["rgb_info_topic"]),
+                (f"{info_node}.inputs:frameId", cam["frame_id"]),
+                (f"{info_node}.inputs:resetSimulationTimeOnStop", True),
+                # RGB
+                (f"{rgb_node}.inputs:type", "rgb"),
+                (f"{rgb_node}.inputs:topicName", cam["rgb_topic"]),
+                (f"{rgb_node}.inputs:frameId", cam["frame_id"]),
+                (f"{rgb_node}.inputs:resetSimulationTimeOnStop", True),
+                # Depth
+                (f"{depth_node}.inputs:type", "depth"),
+                (f"{depth_node}.inputs:topicName", cam["depth_topic"]),
+                (f"{depth_node}.inputs:frameId", cam["frame_id"]),
+                (f"{depth_node}.inputs:resetSimulationTimeOnStop", True),
+                # Depth Point Cloud
+                (f"{pcl_node}.inputs:type", "depth_pcl"),
+                (f"{pcl_node}.inputs:topicName", cam["depth_pcl_topic"]),
+                (f"{pcl_node}.inputs:frameId", cam["frame_id"]),
+                (f"{pcl_node}.inputs:resetSimulationTimeOnStop", True),
+            ])
+
+            connections.extend([
+                ("OnPlaybackTick.outputs:tick", f"{rp_node}.inputs:execIn"),
+                # Info
+                (f"{rp_node}.outputs:execOut", f"{info_node}.inputs:execIn"),
+                (f"{rp_node}.outputs:renderProductPath", f"{info_node}.inputs:renderProductPath"),
+                ("ROS2Context.outputs:context", f"{info_node}.inputs:context"),
+                # RGB
+                (f"{rp_node}.outputs:execOut", f"{rgb_node}.inputs:execIn"),
+                (f"{rp_node}.outputs:renderProductPath", f"{rgb_node}.inputs:renderProductPath"),
+                ("ROS2Context.outputs:context", f"{rgb_node}.inputs:context"),
+                # Depth
+                (f"{rp_node}.outputs:execOut", f"{depth_node}.inputs:execIn"),
+                (f"{rp_node}.outputs:renderProductPath", f"{depth_node}.inputs:renderProductPath"),
+                ("ROS2Context.outputs:context", f"{depth_node}.inputs:context"),
+                # Depth Point Cloud
+                (f"{rp_node}.outputs:execOut", f"{pcl_node}.inputs:execIn"),
+                (f"{rp_node}.outputs:renderProductPath", f"{pcl_node}.inputs:renderProductPath"),
+                ("ROS2Context.outputs:context", f"{pcl_node}.inputs:context"),
+            ])
 
     og.Controller.edit(
         {"graph_path": graph_path, "evaluator_name": "execution"},
@@ -191,9 +315,24 @@ def setup_ros2_action_graph(
         },
     )
 
-    print("[Walkie-Isaac:ROS2] Action Graph successfully built!")
-    print(f"  • Clock:   {clock_topic} (rosgraph_msgs/msg/Clock)")
-    print(f"  • Cmd Vel: {cmd_vel_topic} (geometry_msgs/msg/Twist)")
-    print(f"  • LiDAR:   {lidar_topic} (sensor_msgs/msg/LaserScan, frame: {lidar_frame_id})")
+    print("[Walkie-Isaac:ROS2] Multi-Sensor Action Graph successfully built!")
+    print(f"  • Clock:       {clock_topic} (rosgraph_msgs/msg/Clock)")
+    print(f"  • Cmd Vel:     {cmd_vel_topic} (geometry_msgs/msg/Twist)")
+    if "lidar_2d" in sensors:
+        print(f"  • 2D LiDAR:    {sensors['lidar_2d']['topic_name']} (LaserScan, frame: {sensors['lidar_2d']['frame_id']})")
+    if "lidar_3d" in sensors:
+        print(f"  • 3D LiDAR:    {sensors['lidar_3d']['topic_name']} (PointCloud2, frame: {sensors['lidar_3d']['frame_id']})")
+    if "imu" in sensors:
+        print(f"  • IMU:         {sensors['imu']['topic_name']} (Imu, frame: {sensors['imu']['frame_id']})")
+    if "head_camera" in sensors:
+        h = sensors["head_camera"]
+        print(f"  • Head RGB:    {h['rgb_topic']} (Image, frame: {h['frame_id']})")
+        print(f"  • Head Depth:  {h['depth_topic']} (Image, frame: {h['frame_id']})")
+        print(f"  • Head PCL:    {h['depth_pcl_topic']} (PointCloud2, frame: {h['frame_id']})")
+    if "bottom_camera" in sensors:
+        b = sensors["bottom_camera"]
+        print(f"  • Bottom RGB:  {b['rgb_topic']} (Image, frame: {b['frame_id']})")
+        print(f"  • Bottom Depth:{b['depth_topic']} (Image, frame: {b['frame_id']})")
+        print(f"  • Bottom PCL:  {b['depth_pcl_topic']} (PointCloud2, frame: {b['frame_id']})")
 
     return graph_path
