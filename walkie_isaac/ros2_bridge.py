@@ -169,10 +169,32 @@ def setup_ros2_action_graph(
     ]
 
     # --------------------------------------------------------------------------
+    # Joint States Publisher
+    # --------------------------------------------------------------------------
+    joint_states_cfg = ros2_cfg.get("joint_states", {})
+    if joint_states_cfg.get("enabled", True):
+        from pxr import Sdf
+        js_topic = joint_states_cfg.get("topic_name", "/joint_states")
+        js_target_prim = joint_states_cfg.get(
+            "target_prim",
+            f"{robot_prim_path}/Geometry/base_footprint/base_link",
+        )
+        nodes.append(("PublishJointState", "isaacsim.ros2.bridge.ROS2PublishJointState"))
+        values.extend([
+            ("PublishJointState.inputs:targetPrim", [Sdf.Path(js_target_prim)]),
+            ("PublishJointState.inputs:topicName", js_topic),
+        ])
+        connections.extend([
+            ("OnPlaybackTick.outputs:tick", "PublishJointState.inputs:execIn"),
+            ("ReadSimTime.outputs:simulationTime", "PublishJointState.inputs:timeStamp"),
+            ("ROS2Context.outputs:context", "PublishJointState.inputs:context"),
+        ])
+
+    # --------------------------------------------------------------------------
     # Transform Tree (TF & TF_Static) Publishers
     # --------------------------------------------------------------------------
     tf_cfg = ros2_cfg.get("tf", {})
-    if tf_cfg.get("enabled", True):
+    if tf_cfg.get("enabled", False):
         from pxr import Sdf
         tf_topic = tf_cfg.get("topic_name", "/tf")
         tf_static_topic = tf_cfg.get("static_topic_name", "/tf_static")
@@ -396,10 +418,13 @@ def setup_ros2_action_graph(
 
     print("[Walkie-Isaac:ROS2] Multi-Sensor Action Graph successfully built!")
     print(f"  • Clock:       {clock_topic} (rosgraph_msgs/msg/Clock)")
-    print(f"  • Cmd Vel:     {cmd_vel_topic} (geometry_msgs/msg/Twist)")
-    if tf_cfg.get("enabled", True):
+    if joint_states_cfg.get("enabled", True):
+        print(f"  • Joint States:{js_topic} (sensor_msgs/msg/JointState, target: {js_target_prim})")
+    if tf_cfg.get("enabled", False):
         print(f"  • TF Dynamic:  {tf_topic} (tf2_msgs/msg/TFMessage, parent: {parent_prim_str})")
         print(f"  • TF Static:   {tf_static_topic} (tf2_msgs/msg/TFMessage, latched)")
+    else:
+        print("  • TF Broadcast: Disabled (delegated to ROS 2 robot_state_publisher)")
     if "lidar_2d" in sensors:
         print(f"  • 2D LiDAR:    {sensors['lidar_2d']['topic_name']} (LaserScan, frame: {sensors['lidar_2d']['frame_id']})")
     if "lidar_3d" in sensors:

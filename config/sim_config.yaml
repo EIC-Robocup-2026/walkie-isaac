@@ -92,8 +92,14 @@ ros2:
   domain_id: 0
   clock_topic: "/clock"
   cmd_vel_topic: "/cmd_vel"
-  tf:
+  joint_states:
     enabled: true
+    topic_name: "/joint_states"
+  tf:
+    # Set to false by default so the main ROS 2 architecture (robot_state_publisher)
+    # handles all TF transforms from URDF without publisher conflicts.
+    # Set to true only for quick standalone Isaac Sim visualization without ROS 2 nodes.
+    enabled: false
     topic_name: "/tf"
     static_topic_name: "/tf_static"
     parent_prim: "/World/walkie_bot/Geometry/base_footprint"
