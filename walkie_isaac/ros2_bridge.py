@@ -58,7 +58,7 @@ class CmdVelSubscriber:
             timeout_sec: Timeout after which commands decay to zero if no message received (default: 0.5s).
         """
         import rclpy
-        from geometry_msgs.msg import Twist
+        from geometry_msgs.msg import Twist, TwistStamped
 
         if not rclpy.ok():
             rclpy.init()
@@ -72,10 +72,11 @@ class CmdVelSubscriber:
         self.wz: float = 0.0
         self.last_msg_time: float = 0.0
 
-        def _twist_callback(msg: Twist):
-            self.vx = float(msg.linear.x)
-            self.vy = float(msg.linear.y)
-            self.wz = float(msg.angular.z)
+        def _twist_callback(msg: Any):
+            twist = msg.twist if hasattr(msg, "twist") else msg
+            self.vx = float(twist.linear.x)
+            self.vy = float(twist.linear.y)
+            self.wz = float(twist.angular.z)
             self.last_msg_time = time.time()
 
         self.sub = self.node.create_subscription(
@@ -84,7 +85,29 @@ class CmdVelSubscriber:
             _twist_callback,
             10,
         )
-        print(f"[Walkie-Isaac:ROS2] Subscribed to {topic_name} (watchdog timeout: {timeout_sec}s)")
+        self.sub_stamped = self.node.create_subscription(
+            TwistStamped,
+            topic_name,
+            _twist_callback,
+            10,
+        )
+        print(f"[Walkie-Isaac:ROS2] Subscribed to {topic_name} (Twist + TwistStamped, timeout: {timeout_sec}s)")
+
+        # Also subscribe to /omni_wheel_drive_controller/cmd_vel for twist_mux / ros2_control bridging
+        if topic_name != "/omni_wheel_drive_controller/cmd_vel":
+            self.sub_omni_stamped = self.node.create_subscription(
+                TwistStamped,
+                "/omni_wheel_drive_controller/cmd_vel",
+                _twist_callback,
+                10,
+            )
+            self.sub_omni = self.node.create_subscription(
+                Twist,
+                "/omni_wheel_drive_controller/cmd_vel",
+                _twist_callback,
+                10,
+            )
+            print("[Walkie-Isaac:ROS2] Bridged /omni_wheel_drive_controller/cmd_vel to base controller.")
 
     def update(self, base_controller: OmniBaseController) -> None:
         """Spin ROS 2 node non-blockingly and apply velocity to base controller.

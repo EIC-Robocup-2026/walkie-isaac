@@ -37,11 +37,11 @@ ros2:
   cmd_vel_topic: "/cmd_vel"
   joint_states:
     enabled: true
-    topic_name: "/joint_states"
+    topic_name: "/isaac_joint_states"
     publish_rate_hz: 60.0
   joint_commands:
     enabled: true
-    topic_name: "/joint_commands"
+    topic_name: "/isaac_joint_commands"
   tf:
     # Set to false by default so the main ROS 2 architecture (robot_state_publisher)
     # handles all TF transforms from URDF without publisher conflicts.
