@@ -98,6 +98,7 @@ def main():
 
     enable_extension("isaacsim.ros2.bridge")
     enable_extension("isaacsim.core.nodes")
+    enable_extension("isaacsim.sensors.physics.nodes")
 
     # --------------------------------------------------------------------------
     # 3. Import simulation modules (safe after SimulationApp is active)

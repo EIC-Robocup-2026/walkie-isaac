@@ -201,17 +201,26 @@ def setup_ros2_action_graph(
     joint_states_cfg = ros2_cfg.get("joint_states", {})
     if joint_states_cfg.get("enabled", True):
         from pxr import Sdf
-        js_topic = joint_states_cfg.get("topic_name", "/joint_states")
-        js_target_prim = joint_states_cfg.get(
+        art_root = joint_states_cfg.get(
             "target_prim",
             f"{robot_prim_path}/Geometry/base_footprint/base_link",
         )
+        try:
+            import usdrt.Sdf as usdrt_sdf
+            js_target_path = usdrt_sdf.Path(art_root)
+        except Exception:
+            js_target_path = Sdf.Path(art_root)
+
+        js_topic = joint_states_cfg.get("topic_name", "/isaac_joint_states")
         js_hz = float(joint_states_cfg.get("publish_rate_hz", sim_hz))
         js_step = max(1, round(sim_hz / js_hz)) if js_hz > 0 else 1
 
-        nodes.append(("PublishJointState", "isaacsim.ros2.bridge.ROS2PublishJointState"))
+        nodes.extend([
+            ("ReadJointState", "isaacsim.sensors.physics.IsaacReadJointState"),
+            ("PublishJointState", "isaacsim.ros2.bridge.ROS2PublishJointState"),
+        ])
         values.extend([
-            ("PublishJointState.inputs:targetPrim", [Sdf.Path(js_target_prim)]),
+            ("ReadJointState.inputs:prim", [js_target_path]),
             ("PublishJointState.inputs:topicName", js_topic),
         ])
 
@@ -220,12 +229,20 @@ def setup_ros2_action_graph(
             values.append(("Gate_JointState.inputs:step", int(js_step)))
             connections.extend([
                 ("OnPlaybackTick.outputs:tick", "Gate_JointState.inputs:execIn"),
-                ("Gate_JointState.outputs:execOut", "PublishJointState.inputs:execIn"),
+                ("Gate_JointState.outputs:execOut", "ReadJointState.inputs:execIn"),
             ])
         else:
-            connections.append(("OnPlaybackTick.outputs:tick", "PublishJointState.inputs:execIn"))
+            connections.append(("OnPlaybackTick.outputs:tick", "ReadJointState.inputs:execIn"))
 
         connections.extend([
+            ("ReadJointState.outputs:execOut", "PublishJointState.inputs:execIn"),
+            ("ReadJointState.outputs:jointNames", "PublishJointState.inputs:jointNames"),
+            ("ReadJointState.outputs:jointPositions", "PublishJointState.inputs:jointPositions"),
+            ("ReadJointState.outputs:jointVelocities", "PublishJointState.inputs:jointVelocities"),
+            ("ReadJointState.outputs:jointEfforts", "PublishJointState.inputs:jointEfforts"),
+            ("ReadJointState.outputs:jointDofTypes", "PublishJointState.inputs:jointDofTypes"),
+            ("ReadJointState.outputs:stageMetersPerUnit", "PublishJointState.inputs:stageMetersPerUnit"),
+            ("ReadJointState.outputs:sensorTime", "PublishJointState.inputs:sensorTime"),
             ("ReadSimTime.outputs:simulationTime", "PublishJointState.inputs:timeStamp"),
             ("ROS2Context.outputs:context", "PublishJointState.inputs:context"),
         ])
@@ -236,7 +253,7 @@ def setup_ros2_action_graph(
     joint_cmd_cfg = ros2_cfg.get("joint_commands", {})
     if joint_cmd_cfg.get("enabled", True):
         from pxr import Sdf
-        cmd_topic = joint_cmd_cfg.get("topic_name", "/joint_commands")
+        cmd_topic = joint_cmd_cfg.get("topic_name", "/isaac_joint_commands")
         art_target_prim = joint_cmd_cfg.get(
             "target_prim",
             f"{robot_prim_path}/Geometry/base_footprint/base_link",
@@ -247,12 +264,13 @@ def setup_ros2_action_graph(
         ])
         values.extend([
             ("SubscribeJointCommand.inputs:topicName", cmd_topic),
+            ("ArticulationController.inputs:robotPath", art_target_prim),
             ("ArticulationController.inputs:targetPrim", [Sdf.Path(art_target_prim)]),
         ])
         connections.extend([
             ("OnPlaybackTick.outputs:tick", "SubscribeJointCommand.inputs:execIn"),
             ("ROS2Context.outputs:context", "SubscribeJointCommand.inputs:context"),
-            ("SubscribeJointCommand.outputs:execOut", "ArticulationController.inputs:execIn"),
+            ("OnPlaybackTick.outputs:tick", "ArticulationController.inputs:execIn"),
             ("SubscribeJointCommand.outputs:jointNames", "ArticulationController.inputs:jointNames"),
             ("SubscribeJointCommand.outputs:positionCommand", "ArticulationController.inputs:positionCommand"),
             ("SubscribeJointCommand.outputs:velocityCommand", "ArticulationController.inputs:velocityCommand"),
