@@ -1,0 +1,74 @@
+# ==============================================================================
+# Walkie Bot - Sensors Module Configuration
+# ==============================================================================
+# 2D LiDAR, 3D LiDAR, IMU, and RGBD Cameras
+
+# ------------------------------------------------------------------------------
+# 2D LiDAR (Center / Merged planar scan, Gazebo compatible)
+# ------------------------------------------------------------------------------
+lidar_2d:
+  enabled: true
+  mount_prim_path: "/World/walkie_bot/Geometry/base_footprint/base_link/merged_lidar_link"
+  sensor_prim_path: "/World/walkie_bot/Geometry/base_footprint/base_link/merged_lidar_link/RtxLidar2D"
+  frame_id: "merged_lidar_link"
+  topic_name: "/scan"
+  type: "laser_scan"
+  horizontal_fov: 360.0
+  min_range: 0.05
+  max_range: 25.0
+
+# ------------------------------------------------------------------------------
+# 3D LiDAR (Unitree 4D LiDAR L2 multi-ring point cloud)
+# ------------------------------------------------------------------------------
+lidar_3d:
+  enabled: true
+  mount_prim_path: "/World/walkie_bot/Geometry/base_footprint/base_link/unitree4d_l2_imu_initial"
+  sensor_prim_path: "/World/walkie_bot/Geometry/base_footprint/base_link/unitree4d_l2_imu_initial/RtxLidar3D"
+  frame_id: "unitree4d_l2_imu_initial"
+  topic_name: "/unilidar/cloud"
+  type: "point_cloud"
+  horizontal_fov: 360.0
+  min_range: 0.1
+  max_range: 30.0
+
+# ------------------------------------------------------------------------------
+# IMU (Located at the 3D LiDAR unit)
+# ------------------------------------------------------------------------------
+imu:
+  enabled: true
+  mount_prim_path: "/World/walkie_bot/Geometry/base_footprint/base_link/unitree4d_l2_imu_initial/unitree4d_l2_imu"
+  sensor_prim_path: "/World/walkie_bot/Geometry/base_footprint/base_link/unitree4d_l2_imu_initial/unitree4d_l2_imu/ImuSensor"
+  frame_id: "unitree4d_l2_imu"
+  topic_name: "/unilidar/imu"
+
+# ------------------------------------------------------------------------------
+# Head Camera (ZED 2i: RGB + Depth + 3D Point Cloud)
+# ------------------------------------------------------------------------------
+head_camera:
+  enabled: true
+  mount_prim_path: "/World/walkie_bot/Geometry/base_footprint/base_link/lift_link/head_servo_link/zed_head_camera_link/zed_head_camera_center/zed_head_left_camera_frame/zed_head_left_camera_frame_optical"
+  camera_prim_path: "/World/walkie_bot/Geometry/base_footprint/base_link/lift_link/head_servo_link/zed_head_camera_link/zed_head_camera_center/zed_head_left_camera_frame/zed_head_left_camera_frame_optical/Camera"
+  frame_id: "zed_head_left_camera_frame_optical"
+  width: 640
+  height: 360
+  focal_length: 24.0
+  rgb_topic: "/zed_head/zed_node/rgb/image_rect_color"
+  rgb_info_topic: "/zed_head/zed_node/rgb/camera_info"
+  depth_topic: "/zed_head/zed_node/depth/depth_registered"
+  depth_pcl_topic: "/zed_head/zed_node/point_cloud/cloud_registered"
+
+# ------------------------------------------------------------------------------
+# Bottom Camera (RealSense D415: RGB + Depth + 3D Point Cloud)
+# ------------------------------------------------------------------------------
+bottom_camera:
+  enabled: true
+  mount_prim_path: "/World/walkie_bot/Geometry/base_footprint/base_link/bottom_bottom_screw_frame/bottom_link/bottom_depth_frame/bottom_color_frame/bottom_color_optical_frame"
+  camera_prim_path: "/World/walkie_bot/Geometry/base_footprint/base_link/bottom_bottom_screw_frame/bottom_link/bottom_depth_frame/bottom_color_frame/bottom_color_optical_frame/Camera"
+  frame_id: "bottom_color_optical_frame"
+  width: 640
+  height: 480
+  focal_length: 24.0
+  rgb_topic: "/bottom/color/image_raw"
+  rgb_info_topic: "/bottom/color/camera_info"
+  depth_topic: "/bottom/depth/image_rect_raw"
+  depth_pcl_topic: "/camera/camera/depth/color/points"

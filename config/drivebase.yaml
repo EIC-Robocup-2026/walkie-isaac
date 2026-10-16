@@ -1,0 +1,38 @@
+# ==============================================================================
+# Walkie Bot - Drivebase Module Configuration
+# ==============================================================================
+# 4-wheel omnidirectional base kinematics and actuator drive parameters
+
+kinematics:
+  robot_radius: 0.185    # Distance from base_footprint center to wheels (meters)
+  wheel_radius: 0.076    # Omni wheel radius (meters)
+
+wheels:
+  fl_wheel_joint:
+    angle_deg: 45.0      # Angular orientation in base_footprint frame
+    drive_type: "angular"
+    damping: 1000.0      # Velocity drive gain Kv
+    stiffness: 0.0       # Zero stiffness for velocity control
+    max_force: 100.0     # Max torque (Nm)
+  bl_wheel_joint:
+    angle_deg: 135.0
+    drive_type: "angular"
+    damping: 1000.0
+    stiffness: 0.0
+    max_force: 100.0
+  br_wheel_joint:
+    angle_deg: 225.0
+    drive_type: "angular"
+    damping: 1000.0
+    stiffness: 0.0
+    max_force: 100.0
+  fr_wheel_joint:
+    angle_deg: 315.0
+    drive_type: "angular"
+    damping: 1000.0
+    stiffness: 0.0
+    max_force: 100.0
+
+teleop:
+  cmd_vel_topic: "/cmd_vel"
+  watchdog_timeout: 0.5   # Seconds of inactivity before stopping wheels

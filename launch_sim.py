@@ -58,19 +58,12 @@ def parse_args():
     return parser.parse_args()
 
 
-def load_config(config_path_str: str) -> dict:
-    config_path = Path(config_path_str)
-    if not config_path.is_absolute():
-        config_path = (SCRIPT_DIR / config_path).resolve()
-    if not config_path.is_file():
-        raise FileNotFoundError(f"Configuration file not found: {config_path}")
-    with open(config_path, "r", encoding="utf-8") as f:
-        return yaml.safe_load(f)
+from walkie_isaac.config import load_modular_config
 
 
 def main():
     args = parse_args()
-    config = load_config(args.config)
+    config = load_modular_config(args.config, SCRIPT_DIR)
 
     # Resolve headless setting: CLI argument takes precedence over config
     headless = (
@@ -166,8 +159,10 @@ def main():
     # 7. ROS 2 Bridge Setup Module (Action Graph & Teleop Subscriber)
     # --------------------------------------------------------------------------
     setup_ros2_action_graph(config, sensors, robot_prim_path=robot_prim_path)
-    cmd_vel_topic = config.get("ros2", {}).get("cmd_vel_topic", "/cmd_vel")
-    cmd_vel_sub = CmdVelSubscriber(topic_name=cmd_vel_topic, timeout_sec=0.5)
+    cmd_vel_cfg = config.get("drivebase", {}).get("teleop", {})
+    cmd_vel_topic = cmd_vel_cfg.get("cmd_vel_topic", config.get("ros2", {}).get("cmd_vel_topic", "/cmd_vel"))
+    timeout_sec = float(cmd_vel_cfg.get("watchdog_timeout", 0.5))
+    cmd_vel_sub = CmdVelSubscriber(topic_name=cmd_vel_topic, timeout_sec=timeout_sec)
 
     # --------------------------------------------------------------------------
     # 8. Physics Loop Execution

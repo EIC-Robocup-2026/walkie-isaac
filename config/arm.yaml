@@ -1,0 +1,65 @@
+# ==============================================================================
+# Walkie Bot - Arm, Lift, Head, and Gripper Module Configuration
+# ==============================================================================
+# Actuator position drive parameters, stiffness/damping gains, and nominal home poses
+
+lift:
+  joint_name: "lift_joint"
+  drive_type: "linear"
+  stiffness: 100000.0     # High stiffness to hold torso against gravity
+  damping: 10000.0
+  max_force: 10000.0      # Max force (N)
+  home_position: 0.0      # Nominal home position in meters (top hardstop)
+
+head:
+  joint_name: "head_servo_joint"
+  drive_type: "angular"
+  stiffness: 5000.0
+  damping: 200.0
+  max_force: 50.0
+  home_position_deg: 0.0  # Center forward gaze (degrees)
+
+left_arm:
+  drive_defaults:
+    drive_type: "angular"
+    stiffness: 5000.0
+    damping: 200.0
+    max_force: 100.0
+  # MoveIt nominal home pose for left arm
+  joints:
+    openarm_left_joint1: { home_deg: 15.0 }   # ~0.2618 rad
+    openarm_left_joint2: { home_deg: 0.0 }
+    openarm_left_joint3: { home_deg: 0.0 }
+    openarm_left_joint4: { home_deg: 15.0 }   # ~0.2618 rad
+    openarm_left_joint5: { home_deg: 0.0 }
+    openarm_left_joint6: { home_deg: 0.0 }
+    openarm_left_joint7: { home_deg: 0.0 }
+
+right_arm:
+  drive_defaults:
+    drive_type: "angular"
+    stiffness: 5000.0
+    damping: 200.0
+    max_force: 100.0
+  # MoveIt nominal home pose for right arm
+  joints:
+    openarm_right_joint1: { home_deg: -15.0 } # ~ -0.2618 rad
+    openarm_right_joint2: { home_deg: 0.0 }
+    openarm_right_joint3: { home_deg: 0.0 }
+    openarm_right_joint4: { home_deg: 15.0 }  # ~0.2618 rad
+    openarm_right_joint5: { home_deg: 0.0 }
+    openarm_right_joint6: { home_deg: 0.0 }
+    openarm_right_joint7: { home_deg: 0.0 }
+
+grippers:
+  drive_defaults:
+    drive_type: "linear"
+    stiffness: 2000.0
+    damping: 100.0
+    max_force: 50.0
+    home_position: 0.0    # 0.0 = fully open (meters)
+  fingers:
+    - "openarm_left_finger_joint1"
+    - "openarm_left_finger_joint2"
+    - "openarm_right_finger_joint1"
+    - "openarm_right_finger_joint2"
