@@ -133,13 +133,17 @@ def setup_ros2_action_graph(
     """
     import omni.graph.core as og
 
+    sim_cfg = config.get("simulation", {})
+    physics_dt = float(sim_cfg.get("physics_dt", 1.0 / 60.0))
+    sim_hz = (1.0 / physics_dt) if physics_dt > 0 else 60.0
+
     ros2_cfg = config.get("ros2", {})
     domain_id = int(ros2_cfg.get("domain_id", 0))
     clock_topic = ros2_cfg.get("clock_topic", "/clock")
     cmd_vel_topic = ros2_cfg.get("cmd_vel_topic", "/cmd_vel")
 
     graph_path = "/ROS2_ActionGraph"
-    print(f"[Walkie-Isaac:ROS2] Building Action Graph at {graph_path}...")
+    print(f"[Walkie-Isaac:ROS2] Building Action Graph at {graph_path} (Sim Rate: {sim_hz:.1f} Hz)...")
     keys = og.Controller.Keys
 
     nodes = [
@@ -179,13 +183,26 @@ def setup_ros2_action_graph(
             "target_prim",
             f"{robot_prim_path}/Geometry/base_footprint/base_link",
         )
+        js_hz = float(joint_states_cfg.get("publish_rate_hz", sim_hz))
+        js_step = max(1, round(sim_hz / js_hz)) if js_hz > 0 else 1
+
         nodes.append(("PublishJointState", "isaacsim.ros2.bridge.ROS2PublishJointState"))
         values.extend([
             ("PublishJointState.inputs:targetPrim", [Sdf.Path(js_target_prim)]),
             ("PublishJointState.inputs:topicName", js_topic),
         ])
+
+        if js_step > 1:
+            nodes.append(("Gate_JointState", "isaacsim.core.nodes.IsaacSimulationGate"))
+            values.append(("Gate_JointState.inputs:step", int(js_step)))
+            connections.extend([
+                ("OnPlaybackTick.outputs:tick", "Gate_JointState.inputs:execIn"),
+                ("Gate_JointState.outputs:execOut", "PublishJointState.inputs:execIn"),
+            ])
+        else:
+            connections.append(("OnPlaybackTick.outputs:tick", "PublishJointState.inputs:execIn"))
+
         connections.extend([
-            ("OnPlaybackTick.outputs:tick", "PublishJointState.inputs:execIn"),
             ("ReadSimTime.outputs:simulationTime", "PublishJointState.inputs:timeStamp"),
             ("ROS2Context.outputs:context", "PublishJointState.inputs:context"),
         ])
@@ -350,6 +367,9 @@ def setup_ros2_action_graph(
     # --------------------------------------------------------------------------
     if "imu" in sensors:
         imu = sensors["imu"]
+        imu_hz = float(imu.get("publish_rate_hz", sim_hz))
+        imu_step = max(1, round(sim_hz / imu_hz)) if imu_hz > 0 else 1
+
         nodes.extend([
             ("ReadIMU", "isaacsim.sensors.physics.IsaacReadIMU"),
             ("PublishIMU", "isaacsim.ros2.bridge.ROS2PublishImu"),
@@ -360,8 +380,18 @@ def setup_ros2_action_graph(
             ("PublishIMU.inputs:topicName", imu["topic_name"]),
             ("PublishIMU.inputs:frameId", imu["frame_id"]),
         ])
+
+        if imu_step > 1:
+            nodes.append(("Gate_IMU", "isaacsim.core.nodes.IsaacSimulationGate"))
+            values.append(("Gate_IMU.inputs:step", int(imu_step)))
+            connections.extend([
+                ("OnPlaybackTick.outputs:tick", "Gate_IMU.inputs:execIn"),
+                ("Gate_IMU.outputs:execOut", "ReadIMU.inputs:execIn"),
+            ])
+        else:
+            connections.append(("OnPlaybackTick.outputs:tick", "ReadIMU.inputs:execIn"))
+
         connections.extend([
-            ("OnPlaybackTick.outputs:tick", "ReadIMU.inputs:execIn"),
             ("ReadIMU.outputs:execOut", "PublishIMU.inputs:execIn"),
             ("ROS2Context.outputs:context", "PublishIMU.inputs:context"),
             ("ReadSimTime.outputs:simulationTime", "PublishIMU.inputs:timeStamp"),
@@ -448,7 +478,7 @@ def setup_ros2_action_graph(
     print("[Walkie-Isaac:ROS2] Multi-Sensor Action Graph successfully built!")
     print(f"  • Clock:       {clock_topic} (rosgraph_msgs/msg/Clock)")
     if joint_states_cfg.get("enabled", True):
-        print(f"  • Joint States:{js_topic} (sensor_msgs/msg/JointState, target: {js_target_prim})")
+        print(f"  • Joint States:{js_topic} (sensor_msgs/msg/JointState, rate: {js_hz:.1f} Hz, step: {js_step})")
     if joint_cmd_cfg.get("enabled", True):
         print(f"  • Joint Cmds:  {cmd_topic} (sensor_msgs/msg/JointState -> ArticulationController)")
     if tf_cfg.get("enabled", False):
@@ -457,20 +487,25 @@ def setup_ros2_action_graph(
     else:
         print("  • TF Broadcast: Disabled (delegated to ROS 2 robot_state_publisher)")
     if "lidar_2d" in sensors:
-        print(f"  • 2D LiDAR:    {sensors['lidar_2d']['topic_name']} (LaserScan, frame: {sensors['lidar_2d']['frame_id']})")
+        l = sensors["lidar_2d"]
+        print(f"  • 2D LiDAR:    {l['topic_name']} (LaserScan, frame: {l['frame_id']}, rate: {l.get('publish_rate_hz', 20.0):.1f} Hz)")
     if "lidar_3d" in sensors:
-        print(f"  • 3D LiDAR:    {sensors['lidar_3d']['topic_name']} (PointCloud2, frame: {sensors['lidar_3d']['frame_id']})")
+        l = sensors["lidar_3d"]
+        print(f"  • 3D LiDAR:    {l['topic_name']} (PointCloud2, frame: {l['frame_id']}, rate: {l.get('publish_rate_hz', 10.0):.1f} Hz)")
     if "imu" in sensors:
-        print(f"  • IMU:         {sensors['imu']['topic_name']} (Imu, frame: {sensors['imu']['frame_id']})")
+        im = sensors["imu"]
+        print(f"  • IMU:         {im['topic_name']} (Imu, frame: {im['frame_id']}, rate: {imu_hz:.1f} Hz, step: {imu_step})")
     if "head_camera" in sensors:
         h = sensors["head_camera"]
-        print(f"  • Head RGB:    {h['rgb_topic']} (Image, frame: {h['frame_id']})")
-        print(f"  • Head Depth:  {h['depth_topic']} (Image, frame: {h['frame_id']})")
-        print(f"  • Head PCL:    {h['depth_pcl_topic']} (PointCloud2, frame: {h['frame_id']})")
+        rate = h.get("publish_rate_hz", 15.0)
+        print(f"  • Head RGB:    {h['rgb_topic']} (Image, frame: {h['frame_id']}, rate: {rate:.1f} Hz)")
+        print(f"  • Head Depth:  {h['depth_topic']} (Image, frame: {h['frame_id']}, rate: {rate:.1f} Hz)")
+        print(f"  • Head PCL:    {h['depth_pcl_topic']} (PointCloud2, frame: {h['frame_id']}, rate: {rate:.1f} Hz)")
     if "bottom_camera" in sensors:
         b = sensors["bottom_camera"]
-        print(f"  • Bottom RGB:  {b['rgb_topic']} (Image, frame: {b['frame_id']})")
-        print(f"  • Bottom Depth:{b['depth_topic']} (Image, frame: {b['frame_id']})")
-        print(f"  • Bottom PCL:  {b['depth_pcl_topic']} (PointCloud2, frame: {b['frame_id']})")
+        rate = b.get("publish_rate_hz", 15.0)
+        print(f"  • Bottom RGB:  {b['rgb_topic']} (Image, frame: {b['frame_id']}, rate: {rate:.1f} Hz)")
+        print(f"  • Bottom Depth:{b['depth_topic']} (Image, frame: {b['frame_id']}, rate: {rate:.1f} Hz)")
+        print(f"  • Bottom PCL:  {b['depth_pcl_topic']} (PointCloud2, frame: {b['frame_id']}, rate: {rate:.1f} Hz)")
 
     return graph_path

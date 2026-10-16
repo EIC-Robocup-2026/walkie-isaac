@@ -38,6 +38,7 @@ ros2:
   joint_states:
     enabled: true
     topic_name: "/joint_states"
+    publish_rate_hz: 60.0
   joint_commands:
     enabled: true
     topic_name: "/joint_commands"
