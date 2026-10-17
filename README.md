@@ -53,47 +53,82 @@ walkie-isaac/
 
 ---
 
-## 4. Quick Start
+## 4. Quick Start & Execution Workflows
 
-### Running from Workspace Root via Pixi
+### 4.1 Recommended Multi-Terminal Workflow
 
-The root `walkie-ros` repository provides convenient tasks:
+Because the workspace communicates over Zenoh (`rmw_zenoh_cpp`), start `zenoh-router` first, followed by the simulation, bringup, and navigation:
 
 ```bash
-# Launch interactive GUI simulation
+# Terminal 1: Start Zenoh Router (required for node and service discovery)
+pixi run zenoh-router
+
+# Terminal 2: Launch Isaac Sim Walkie Bot Simulation
 pixi run sim
 
-# In a second terminal: teleoperate the robot base
-pixi run teleop
+# Terminal 3: Full ROS 2 Bringup (RSP with lift_at_top, ros2_control, RViz)
+pixi run full-isaacbringup
 
-# In a third terminal: list active simulation topics
-pixi run topics
+# Terminal 4: Nav2 Navigation (AMCL localization + MPPI controller + Costmaps)
+pixi run nav-sim
 ```
 
-### Headless / CI Mode
+Alternatively, for SLAM mapping instead of pre-built map navigation:
+```bash
+pixi run slam-sim
+```
 
-To test or benchmark without opening the graphical interface:
+---
+
+### 4.2 Individual Component Tools
+
+| Command | Description |
+| --- | --- |
+| `pixi run sim` | Launch Isaac Sim Walkie Bot GUI simulation with ROS 2 bridge |
+| `pixi run zenoh-router` | Start Zenoh router daemon (`rmw_zenohd`) |
+| `pixi run full-isaacbringup` | Full bringup: robot_state_publisher, controllers, self-filter, and RViz |
+| `pixi run nav-sim` | Launch Nav2 localization (AMCL) and navigation (MPPI) |
+| `pixi run slam-sim` | Launch SLAM Toolbox online mapping |
+| `pixi run teleop` | Keyboard teleoperation for base movement |
+| `pixi run test-joints` | Interactive joint control CLI for arms, lift, head, and grippers |
+| `pixi run moveit-sim` | Launch MoveIt 2 motion planning for bimanual arms |
+| `pixi run rviz-scan` | Launch RViz2 pre-configured for LiDAR `/scan` visualization |
+| `pixi run rviz-sensors` | Launch RViz2 pre-configured for all robot sensors |
+| `pixi run topics` | Inspect active ROS 2 topics |
+
+---
+
+### 4.3 Headless / CI Mode
+
+To benchmark or test in automated CI pipelines without opening the GUI:
 
 ```bash
-# Run headless for 300 steps and exit cleanly
+# Run headless for 300 physics steps and exit cleanly
 pixi run sim -- --headless --test --steps 300
 ```
 
-### 3. Visualizing LiDAR in RViz2
+---
 
-```bash
-pixi run rviz-scan
-```
-*(Pre-configured with `Fixed Frame: front_lidar_link` and `use_sim_time: true`).*
+### 4.4 Build Guideline (Memory Safety)
 
-### 4. Running Standalone with Isaac Sim Python
+> [!IMPORTANT]
+> Nav2 and MoveIt compilation units consume 1.5–2.5 GB RAM each. To avoid laptop freezes or Out-Of-Memory (OOM) crashes, **always build with 1 parallel worker**:
+> ```bash
+> pixi run build-setup               # Builds with --parallel-workers 1 by default
+> pixi run build-pkg -- <package>    # Rebuilds a single package
+> ```
 
-You can also run the launcher script directly outside Pixi using your Isaac Sim Python environment:
+---
+
+### 4.5 Standalone Execution with Isaac Sim Python
+
+You can also run the simulation script directly with Isaac Sim's virtual environment:
 
 ```bash
 export ROS_DISTRO=jazzy
-export RMW_IMPLEMENTATION=rmw_fastrtps_cpp
-export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/home/kay/IsaacLab/.venv/lib/python3.12/site-packages/isaacsim/exts/isaacsim.ros2.core/jazzy/lib
+export RMW_IMPLEMENTATION=rmw_zenoh_cpp
+export AMENT_PREFIX_PATH=$CONDA_PREFIX
+export LD_LIBRARY_PATH=$CONDA_PREFIX/lib:/home/kay/IsaacLab/.venv/lib/python3.12/site-packages/isaacsim/exts/isaacsim.ros2.core/jazzy/lib:$LD_LIBRARY_PATH
 
 python3 launch_sim.py [--headless] [--test] [--steps <count>] [--config <path>]
 ```
@@ -162,7 +197,11 @@ graph TD
 | Symptom | Cause | Solution |
 | --- | --- | --- |
 | `sequence size exceeds remaining buffer` | FastDDS / ROSIDL distro mismatch between Humble bridge and Jazzy client | Isaac Sim must be set to `ROS_DISTRO=jazzy` with `LD_LIBRARY_PATH` pointing to `isaacsim.ros2.core/jazzy/lib` (configured by default in `pixi run sim`). |
-| `Message Filter dropping message: frame 'front_lidar_link' ... queue is full` | RViz is running on wall clock time OR missing TF transform to `map` | 1. Always launch RViz with `--ros-args -p use_sim_time:=true` (or run `pixi run rviz-scan`).<br/>2. In RViz **Global Options**, change **Fixed Frame** from `map` to `front_lidar_link`. |
+| `Unable to connect to a Zenoh router after 1 attempt(s)` | Zenoh router is not running | The workspace defaults to `RMW_IMPLEMENTATION=rmw_zenoh_cpp`. Start the router with `pixi run zenoh-router` in a dedicated terminal before launching simulation or bringup. |
+| `Waiting for service amcl/get_state...` or `version 'GLIBC_2.38' not found` | Host glibc (Ubuntu 22.04 with glibc 2.35) missing glibc 2.38 symbols from conda sysroot | Rebuild Nav2 with `pixi run build-pkg -- nav2_amcl` (or run `pixi run build-setup`). The workspace includes automatic symbol version compatibility shimming in `nav2_common/cmake/glibc_compat.h`. |
+| `The class required for this panel, 'nav2_rviz_plugins/Navigation 2', could not be loaded` | Nav2 RViz plugin failed to load due to missing ISO C23 symbols | Resolved via compatibility wrappers in `nav2_rviz_plugins/src/nav2_panel.cpp`. Rebuild with `pixi run build-pkg -- nav2_rviz_plugins`. |
+| Lift / torso at opposite positions in RViz vs Isaac Sim | Torso prismatic joint limits in Isaac Sim USD are inverted relative to URDF | Launch `robot_state_publisher` with `lift_at_top:=true` (already configured in `full_isaac_bringup.launch.py` and `pixi run rsp`). |
+| `Message Filter dropping message: frame 'front_lidar_link' ... queue is full` | RViz is running on wall clock time OR missing TF transform to `map` | 1. Always launch RViz with `--ros-args -p use_sim_time:=true` (or run `pixi run rviz-scan`).<br/>2. When running standalone without bringup, set **Fixed Frame** to `front_lidar_link`. |
 | `ROS2 Bridge startup failed` | Isaac Sim cannot locate bundled ROS 2 shared libraries | Ensure `LD_LIBRARY_PATH` includes the Isaac Sim `isaacsim.ros2.core/jazzy/lib` path *before* starting the process. |
 | `Topic not found` | Stage is stopped or paused | OmniGraph nodes use `OnPlaybackTick` and only publish while the timeline is playing (`timeline.play()`). |
 | Conflicting Python packages | Host `PYTHONPATH` leaking into Isaac Sim | Ensure `PYTHONPATH` is unset before launching (handled automatically by `launch_sim.py` and `pixi run sim`). |
